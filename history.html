@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Patient History - LeukoNet</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="brand">🧬 LeukoNet</div>
+        <div class="links">
+            <a href="/">Dashboard</a>
+            <a href="/history">History</a>
+            <button onclick="logout()">Logout</button>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="card">
+            <h2>Patient History</h2>
+            <p style="color: var(--text-muted); margin-bottom: 2rem;">Review past diagnostic analyses and predictions.</p>
+            
+            <div style="overflow-x: auto;">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Patient Info</th>
+                            <th>Prediction</th>
+                            <th>Confidence</th>
+                            <th>Original</th>
+                            <th>Heatmap</th>
+                        </tr>
+                    </thead>
+                    <tbody id="historyTableBody">
+                        <!-- Filled by JS -->
+                    </tbody>
+                </table>
+            </div>
+            <div id="loading" class="loader hidden"></div>
+        </div>
+    </div>
+
+    <script src="/static/js/main.js"></script>
+    <script>
+        checkAuth();
+
+        async function loadHistory() {
+            const token = localStorage.getItem('leukonet_token');
+            document.getElementById('loading').classList.remove('hidden');
+            
+            try {
+                const response = await fetch('/api/history', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (response.status === 401) { logout(); return; }
+
+                const data = await response.json();
+                const tbody = document.getElementById('historyTableBody');
+                
+                data.records.forEach(record => {
+                    const tr = document.createElement('tr');
+                    const date = new Date(record.created_at).toLocaleString();
+                    
+                    tr.innerHTML = `
+                        <td>${date}</td>
+                        <td>
+                            <strong>${record.patient_name}</strong><br>
+                            <span style="font-size: 0.85rem; color: var(--text-muted);">${record.patient_id}</span>
+                        </td>
+                        <td>
+                            <span style="padding: 0.25rem 0.5rem; border-radius: 4px; font-weight: 500; font-size: 0.9rem;"
+                                  class="prediction-${record.prediction.toLowerCase()}">
+                                ${record.prediction}
+                            </span>
+                        </td>
+                        <td>${record.confidence}%</td>
+                        <td><img src="${record.image_path}" class="thumbnail" alt="Original"></td>
+                        <td>${record.heatmap_path ? `<img src="${record.heatmap_path}" class="thumbnail" alt="Heatmap">` : '-'}</td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            } catch (err) {
+                console.error(err);
+                alert('Failed to load history');
+            } finally {
+                document.getElementById('loading').classList.add('hidden');
+            }
+        }
+
+        loadHistory();
+    </script>
+</body>
+</html>

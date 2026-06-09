@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Doctor Portal Login - LeukoNet</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+    <style>
+        body {
+            background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+        }
+        .auth-card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 450px;
+            padding: 2.5rem;
+            text-align: center;
+        }
+        .auth-logo {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--primary);
+            margin-bottom: 0.5rem;
+        }
+        .auth-subtitle {
+            color: var(--text-muted);
+            margin-bottom: 2rem;
+            font-size: 0.95rem;
+        }
+        .toggle-link {
+            color: var(--primary);
+            cursor: pointer;
+            font-weight: 500;
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Sign In Pane -->
+    <div id="signinPane" class="auth-card">
+        <div class="auth-logo">🧬 LeukoNet</div>
+        <div class="auth-subtitle">Clinical Diagnostic Portal</div>
+        
+        <form id="loginForm" style="text-align: left;">
+            <div class="form-group">
+                <label>Doctor Username</label>
+                <input type="text" id="loginUsername" class="form-control" required placeholder="dr_smith">
+            </div>
+            <div class="form-group">
+                <label>Password</label>
+                <input type="password" id="loginPassword" class="form-control" required placeholder="••••••••">
+            </div>
+            <div id="loginError" style="color: var(--danger); margin-bottom: 1rem; text-align: center; display: none; font-size: 0.9rem;"></div>
+            <button type="submit" class="btn" id="loginBtn">Portal Sign In</button>
+        </form>
+
+        <p style="margin-top: 1.5rem; font-size: 0.9rem; color: var(--text-muted);">
+            New physician? <span class="toggle-link" onclick="toggleAuth()">Register here</span>
+        </p>
+    </div>
+
+    <!-- Sign Up Pane -->
+    <div id="signupPane" class="auth-card hidden">
+        <div class="auth-logo">🧬 LeukoNet</div>
+        <div class="auth-subtitle">Physician Registration</div>
+        
+        <form id="signupForm" style="text-align: left;">
+            <div class="form-group" style="margin-bottom: 1rem;">
+                <label>Full Name</label>
+                <input type="text" id="regFullName" class="form-control" required placeholder="Dr. John Smith">
+            </div>
+            <div class="form-group" style="margin-bottom: 1rem;">
+                <label>Hospital / Clinic</label>
+                <input type="text" id="regHospital" class="form-control" placeholder="Central General Hospital">
+            </div>
+            <div class="form-group" style="margin-bottom: 1rem;">
+                <label>Set Username</label>
+                <input type="text" id="regUsername" class="form-control" required placeholder="dr_smith">
+            </div>
+            <div class="form-group" style="margin-bottom: 1rem;">
+                <label>Set Password</label>
+                <input type="password" id="regPassword" class="form-control" required placeholder="••••••••">
+            </div>
+            <div id="signupError" style="color: var(--danger); margin-bottom: 1rem; text-align: center; display: none; font-size: 0.9rem;"></div>
+            <div id="signupSuccess" style="color: var(--success); margin-bottom: 1rem; text-align: center; display: none; font-size: 0.9rem;"></div>
+            <button type="submit" class="btn" id="signupBtn">Complete Registration</button>
+        </form>
+
+        <p style="margin-top: 1.5rem; font-size: 0.9rem; color: var(--text-muted);">
+            Already registered? <span class="toggle-link" onclick="toggleAuth()">Sign In</span>
+        </p>
+    </div>
+
+    <script src="/static/js/main.js"></script>
+    <script>
+        function toggleAuth() {
+            document.getElementById('signinPane').classList.toggle('hidden');
+            document.getElementById('signupPane').classList.toggle('hidden');
+            document.getElementById('loginError').style.display = 'none';
+            document.getElementById('signupError').style.display = 'none';
+            document.getElementById('signupSuccess').style.display = 'none';
+        }
+
+        // Login Submit
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('loginBtn');
+            btn.disabled = true;
+            btn.textContent = 'Authenticating...';
+            
+            const formData = new FormData();
+            formData.append('username', document.getElementById('loginUsername').value);
+            formData.append('password', document.getElementById('loginPassword').value);
+            
+            try {
+                const res = await fetch('/api/login', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await res.json();
+                
+                if (res.ok) {
+                    localStorage.setItem('leukonet_token', data.access_token);
+                    window.location.href = '/';
+                } else {
+                    const err = document.getElementById('loginError');
+                    err.textContent = data.detail || 'Authentication failed';
+                    err.style.display = 'block';
+                }
+            } catch (err) {
+                console.error(err);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Portal Sign In';
+            }
+        });
+
+        // Signup Submit
+        document.getElementById('signupForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('signupBtn');
+            btn.disabled = true;
+            btn.textContent = 'Registering...';
+            
+            const formData = new FormData();
+            formData.append('full_name', document.getElementById('regFullName').value);
+            formData.append('hospital', document.getElementById('regHospital').value);
+            formData.append('username', document.getElementById('regUsername').value);
+            formData.append('password', document.getElementById('regPassword').value);
+            
+            try {
+                const res = await fetch('/api/signup', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await res.json();
+                
+                if (res.ok) {
+                    document.getElementById('signupSuccess').textContent = 'Registration successful! You can now sign in.';
+                    document.getElementById('signupSuccess').style.display = 'block';
+                    document.getElementById('signupForm').reset();
+                    setTimeout(toggleAuth, 2000);
+                } else {
+                    const err = document.getElementById('signupError');
+                    err.textContent = data.detail || 'Registration failed';
+                    err.style.display = 'block';
+                }
+            } catch (err) {
+                console.error(err);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Complete Registration';
+            }
+        });
+    </script>
+</body>
+</html>

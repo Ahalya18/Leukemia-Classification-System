@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LeukoNet - Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="brand">🧬 LeukoNet</div>
+        <div class="links">
+            <a href="/">Dashboard</a>
+            <a href="/history">History</a>
+            <button onclick="logout()">Logout</button>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="card" style="max-width: 600px; margin: 0 auto; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);">
+            <h2 style="margin-bottom: 0.5rem;">New Prediction</h2>
+            <p style="color: var(--text-muted); margin-bottom: 2rem;">Upload a blood smear image for leukemia classification.</p>
+            
+            <form id="uploadForm">
+                <div class="form-group">
+                    <label>Patient ID</label>
+                    <input type="text" id="patientId" class="form-control" required placeholder="e.g. PT-1002">
+                </div>
+                <div class="form-group">
+                    <label>Patient Name</label>
+                    <input type="text" id="patientName" class="form-control" required placeholder="John Doe">
+                </div>
+                <div class="form-group">
+                    <label>Blood Smear Image (JPG/PNG)</label>
+                    <input type="file" id="imageFile" class="form-control" accept="image/*" required>
+                </div>
+                <button type="submit" class="btn" id="submitBtn">Analyze Image</button>
+            </form>
+
+            <div id="loading" class="hidden">
+                <div class="loader"></div>
+                <p style="text-align: center; color: var(--text-muted);">Analyzing image structures...</p>
+            </div>
+        </div>
+
+        <div id="resultSection" class="hidden" style="margin-top: 3rem;">
+            <div style="text-align: center; margin-bottom: 2rem;">
+                <h2 style="font-size: 2rem;">Analysis Results</h2>
+                <span id="predictionBadge" class="prediction-badge"></span>
+                <p style="font-size: 1.1rem; color: var(--text-muted);">Primary AI Confidence: <strong id="confidenceScore" style="color: var(--text-main);"></strong>%</p>
+            </div>
+            
+            <div class="results-grid">
+                <div class="card result-card">
+                    <h3 style="margin-bottom: 1rem;">Original Image</h3>
+                    <img id="originalImage" src="" alt="Original Upload" style="margin-bottom: 1rem;">
+                    <p style="font-size: 0.85rem; color: var(--text-muted);">Input blood smear microphotograph.</p>
+                </div>
+
+                <div class="card result-card">
+                    <h3 style="margin-bottom: 1rem;">Grad-CAM Explainability</h3>
+                    <img id="heatmapImage" src="" alt="Grad-CAM Heatmap" style="margin-bottom: 1rem;">
+                    <p style="font-size: 0.85rem; color: var(--text-muted);">Red heatmap regions highlight the exact cellular anomalies driving the neural network's classification.</p>
+                </div>
+
+                <div class="card result-card" style="text-align: left;">
+                    <h3 style="margin-bottom: 1.5rem; text-align: center;">Clinical Metrics</h3>
+                    
+                    <div style="height: 180px; margin-bottom: 2rem; display: flex; justify-content: center; align-items: center;">
+                        <canvas id="probabilityChart"></canvas>
+                    </div>
+                    
+                    <ul id="metricsList" style="list-style: none; font-size: 0.95rem; padding: 0;">
+                        <!-- Injected by JS -->
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/main.js"></script>
+    <script>
+        checkAuth();
+        let probChart = null;
+
+        document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const btn = document.getElementById('submitBtn');
+            const resultSection = document.getElementById('resultSection');
+            const loading = document.getElementById('loading');
+            const form = document.getElementById('uploadForm');
+
+            btn.disabled = true;
+            loading.classList.remove('hidden');
+            resultSection.classList.add('hidden');
+            
+            const formData = new FormData();
+            formData.append('patient_id', document.getElementById('patientId').value);
+            formData.append('patient_name', document.getElementById('patientName').value);
+            formData.append('file', document.getElementById('imageFile').files[0]);
+
+            const token = localStorage.getItem('leukonet_token');
+            
+            try {
+                const response = await fetch('/api/predict', {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}` },
+                    body: formData
+                });
+
+                if (response.status === 401) { logout(); return; }
+
+                const data = await response.json();
+                
+                if (response.ok) {
+                    // Visuals
+                    document.getElementById('originalImage').src = data.image_url;
+                    
+                    if(data.heatmap_url) {
+                        document.getElementById('heatmapImage').src = data.heatmap_url;
+                        document.getElementById('heatmapImage').style.display = 'inline-block';
+                    } else {
+                        document.getElementById('heatmapImage').style.display = 'none';
+                    }
+
+                    // Main Badges
+                    const badge = document.getElementById('predictionBadge');
+                    badge.textContent = `Diagnosis: ${data.prediction}`;
+                    badge.className = `prediction-badge prediction-${data.prediction.toLowerCase()}`;
+                    document.getElementById('confidenceScore').textContent = data.confidence;
+
+                    // Chart.js Setup
+                    const ctx = document.getElementById('probabilityChart').getContext('2d');
+                    if (probChart) probChart.destroy();
+
+                    const allProb = data.distribution['ALL'] || 0;
+                    const amlProb = data.distribution['AML'] || 0;
+                    const normalProb = data.distribution['Normal'] || 0;
+                    const uncertainProb = data.distribution['Uncertain'] || 0;
+
+                    probChart = new Chart(ctx, {
+                        type: 'doughnut',
+                        data: {
+                            labels: ['ALL (%)', 'AML (%)', 'Normal (%)', 'Uncertain (%)'],
+                            datasets: [{
+                                data: [allProb, amlProb, normalProb, uncertainProb],
+                                backgroundColor: ['#ef4444', '#f59e0b', '#10b981', '#94a3b8'],
+                                hoverOffset: 4,
+                                borderWidth: 0
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            cutout: '70%',
+                            plugins: {
+                                legend: {
+                                    position: 'bottom',
+                                    labels: { font: { family: 'Inter' } }
+                                }
+                            }
+                        }
+                    });
+
+                    // Metrics List
+                    const metricsList = document.getElementById('metricsList');
+                    metricsList.innerHTML = '';
+                    if (data.metrics) {
+                        for (const [key, val] of Object.entries(data.metrics)) {
+                            metricsList.innerHTML += `
+                                <li class="metric-item">
+                                    <span class="metric-label">${key}</span>
+                                    <span class="metric-value">${val}</span>
+                                </li>
+                            `;
+                        }
+                    }
+
+                    resultSection.classList.remove('hidden');
+                    // We DO NOT reset the form so the user can easily re-submit the same image to test determinism.
+                    // However, that might be annoying if they want to enter a new patient. We'll leave it filled.
+                } else {
+                    alert('Error: ' + (data.detail || 'Failed to analyze image'));
+                }
+            } catch (err) {
+                console.error(err);
+                alert('Connection error');
+            } finally {
+                btn.disabled = false;
+                loading.classList.add('hidden');
+            }
+        });
+    </script>
+</body>
+</html>
